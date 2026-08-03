@@ -9,6 +9,7 @@ import java.awt.Graphics2D;
 import java.awt.Stroke;
 import java.time.LocalDateTime;
 import javax.inject.Inject;
+import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
@@ -20,7 +21,13 @@ import net.runelite.client.ui.overlay.OverlayPosition;
  * bright the border is comes from {@link AlarmState#pulse(LocalDateTime)}.
  * The plugin is injected rather than the state, so that the overlay is
  * guaranteed to read the same instance the plugin updates.
+ * <p>
+ * Scoped to one instance per plugin injector, for the same reason as
+ * {@link BannerOverlay}: unscoped, Guice hands out a fresh overlay per
+ * injection point, so a second injection point would silently get an overlay
+ * that is not the one the plugin registered and renders.
  */
+@Singleton
 public class AlarmOverlay extends Overlay
 {
 	private static final int BORDER_WIDTH = 12;

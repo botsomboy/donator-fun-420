@@ -8,6 +8,7 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.Shape;
 import javax.inject.Inject;
+import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
@@ -18,7 +19,13 @@ import net.runelite.client.ui.overlay.OverlayPosition;
  * whether to draw comes from the config and from {@link Fun420Plugin#isBannerVisible()}.
  * The bounds of the close button are published so that the plugin can hit test
  * a click against them; they are empty whenever the banner is not on screen.
+ * <p>
+ * Scoped to one instance per plugin injector. Without that scope Guice hands
+ * out a fresh overlay per injection point, so {@link BannerMouseListener} would
+ * hit test against an overlay that is never rendered and whose close button is
+ * therefore always empty.
  */
+@Singleton
 public class BannerOverlay extends Overlay
 {
 	private static final int HEIGHT = 28;
