@@ -8,10 +8,15 @@ import java.time.LocalDateTime;
  * the box slides in, the bar drains through the thinking time, the answer is
  * shown for the answer time, and the whole thing fades out.
  * <p>
- * The slide and the fade are presentation constants; the thinking and answer
- * times come from the config and are handed over at {@link #start}. Same shape
- * as {@link AlarmState} and {@link IntroState}, so all of it is testable
- * without rendering anything.
+ * Both texts arrive as if blown in on a puff of smoke: one plume rides along
+ * with the box as it slides in, and a second lands with the answer. How far
+ * either has cleared is a number between 0 and 1 reckoned here, so the smoke
+ * is as testable as the slide and the countdown; the overlay only draws it.
+ * <p>
+ * The slide, the fade and the plumes are presentation constants; the thinking
+ * and answer times come from the config and are handed over at {@link #start}.
+ * Same shape as {@link AlarmState} and {@link IntroState}, so all of it is
+ * testable without rendering anything.
  * <p>
  * The start moment, the question and both durations live together in one
  * immutable {@link Run} behind a single volatile reference. A render pass can
@@ -25,6 +30,16 @@ public final class QuizState
 
 	/** How long the box takes to fade out once the answer time is up. */
 	private static final long FADE_MILLIS = 600L;
+
+	/**
+	 * How long a plume of smoke takes to swell, drift off and clear. Longer
+	 * than the slide on purpose: the smoke has to still be hanging when the
+	 * box lands, or the text was slid in rather than blown in.
+	 */
+	private static final long PLUME_MILLIS = 900L;
+
+	/** What a plume reads when there is no smoke to draw. */
+	private static final double CLEARED = 1.0;
 
 	private volatile Run run;
 
@@ -136,6 +151,66 @@ public final class QuizState
 		return current != null
 			&& current.isActive(now)
 			&& current.millisSince(now) >= current.thinkingEnds();
+	}
+
+	/**
+	 * How far the plume that the question rides in on has cleared: 0 the
+	 * moment it is blown, at the very start of the run, and 1 once it has
+	 * drifted away, which is a little after the box has landed. Stays at 1
+	 * for the rest of the run.
+	 *
+	 * @see #plumeProgress
+	 */
+	public double questionPlumeProgress(LocalDateTime now)
+	{
+		Run current = run;
+		if (current == null || !current.isActive(now))
+		{
+			return CLEARED;
+		}
+		return plumeProgress(current.millisSince(now), 0L);
+	}
+
+	/**
+	 * How far the plume that the answer lands on has cleared: 0 the moment
+	 * the answer appears and 1 once it has drifted away. Reads 1 for the
+	 * whole slide and thinking time before that, because a puff that has not
+	 * been blown is nothing to draw, not a fresh cloud.
+	 *
+	 * @see #plumeProgress
+	 */
+	public double answerPlumeProgress(LocalDateTime now)
+	{
+		Run current = run;
+		if (current == null || !current.isActive(now))
+		{
+			return CLEARED;
+		}
+		return plumeProgress(current.millisSince(now), current.thinkingEnds());
+	}
+
+	/**
+	 * The shared reckoning behind both plumes. The overlay draws the smoke
+	 * thicker the lower this reads, so 1 is the value that paints nothing,
+	 * and it is therefore what a plume reads before it is blown, after it has
+	 * cleared and whenever there is no box on screen at all.
+	 *
+	 * @param millis  how far the run has come
+	 * @param blownAt how far into the run this plume is blown
+	 */
+	private static double plumeProgress(long millis, long blownAt)
+	{
+		if (millis < blownAt)
+		{
+			return CLEARED;
+		}
+
+		long since = millis - blownAt;
+		if (since >= PLUME_MILLIS)
+		{
+			return CLEARED;
+		}
+		return since / (double) PLUME_MILLIS;
 	}
 
 	/**

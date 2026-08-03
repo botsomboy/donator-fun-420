@@ -19,12 +19,16 @@ public class QuizStateTest
 	private static final QuizQuestion OTHER_QUESTION =
 		new QuizQuestion("What is hemp?", "Cannabis grown for fibre.");
 
-	/** The presentation constants the box slides and fades with. */
+	/** The presentation constants the box slides, smokes and fades with. */
 	private static final long SLIDE_MILLIS = 400L;
 	private static final long FADE_MILLIS = 600L;
+	private static final long PLUME_MILLIS = 900L;
 
 	private static final Duration THINKING = Duration.ofSeconds(10);
 	private static final Duration ANSWER = Duration.ofSeconds(10);
+
+	/** The moment the bar is empty, the answer is up and its plume is blown. */
+	private static final long ANSWER_START = SLIDE_MILLIS + 10_000L;
 
 	/** Slide, thinking and answer are behind us; the fade begins here. */
 	private static final long FADE_START = SLIDE_MILLIS + 20_000L;
@@ -394,6 +398,336 @@ public class QuizStateTest
 			double opacity = state.opacity(at(millis));
 			assertTrue("opacity too low at " + millis + "ms", opacity >= 0.0);
 			assertTrue("opacity too high at " + millis + "ms", opacity <= 1.0);
+		}
+	}
+
+	// --- the plume the question rides in on -------------------------------
+
+	@Test
+	public void theQuestionPlumeIsFreshTheMomentTheRunStarts()
+	{
+		assertEquals(0.0, started().questionPlumeProgress(START), 0.0);
+	}
+
+	@Test
+	public void theQuestionPlumeClearsLinearly()
+	{
+		QuizState state = started();
+
+		assertEquals(0.1, state.questionPlumeProgress(at(90)), 0.0001);
+		assertEquals(0.25, state.questionPlumeProgress(at(225)), 0.0001);
+		assertEquals(0.5, state.questionPlumeProgress(at(450)), 0.0001);
+		assertEquals(0.75, state.questionPlumeProgress(at(675)), 0.0001);
+		assertEquals(0.9, state.questionPlumeProgress(at(810)), 0.0001);
+	}
+
+	/**
+	 * Both sides of the moment the plume is gone. A plume that cleared a
+	 * millisecond early would still read 1 at the boundary, so the
+	 * millisecond before it has to read less.
+	 */
+	@Test
+	public void theQuestionPlumeClearsExactlyWhenItsTimeIsUp()
+	{
+		QuizState state = started();
+
+		assertTrue("still some smoke one millisecond earlier",
+			state.questionPlumeProgress(at(PLUME_MILLIS - 1)) < 1.0);
+		assertEquals(1.0, state.questionPlumeProgress(at(PLUME_MILLIS)), 0.0);
+	}
+
+	@Test
+	public void theQuestionPlumeStaysClearedForTheRestOfTheRun()
+	{
+		QuizState state = started();
+
+		assertEquals(1.0, state.questionPlumeProgress(at(PLUME_MILLIS + 1)), 0.0);
+		assertEquals(1.0, state.questionPlumeProgress(at(5000)), 0.0);
+		assertEquals(1.0, state.questionPlumeProgress(at(FADE_START)), 0.0);
+		assertEquals(1.0, state.questionPlumeProgress(at(TOTAL - 1)), 0.0);
+	}
+
+	/**
+	 * The smoke has to outlast the slide, or the box simply arrives and the
+	 * plume was never part of it landing.
+	 */
+	@Test
+	public void theQuestionPlumeIsStillHangingWhenTheBoxHasLanded()
+	{
+		QuizState state = started();
+
+		assertEquals("precondition: the box is in place", 1.0,
+			state.slideProgress(at(SLIDE_MILLIS)), 0.0);
+		assertTrue("the plume should not have cleared with the slide",
+			state.questionPlumeProgress(at(SLIDE_MILLIS)) < 1.0);
+		assertTrue("but it should be well on its way",
+			state.questionPlumeProgress(at(SLIDE_MILLIS)) > 0.0);
+	}
+
+	/** Kills a plume that hangs still and then vanishes in one step. */
+	@Test
+	public void theQuestionPlumeKeepsClearingThroughItsTime()
+	{
+		QuizState state = started();
+
+		double previous = state.questionPlumeProgress(START);
+		for (long millis = 10; millis < PLUME_MILLIS; millis += 10)
+		{
+			double current = state.questionPlumeProgress(at(millis));
+			assertTrue("the plume should have drifted on at " + millis + "ms,"
+					+ " was " + previous + " and is " + current,
+				current > previous);
+			previous = current;
+		}
+	}
+
+	/**
+	 * Cleared, not fresh, when there is nothing on screen: the overlay draws
+	 * the smoke thicker the lower this reads, so the far end is the one that
+	 * paints nothing.
+	 */
+	@Test
+	public void theQuestionPlumeIsClearedWhenNothingIsOnScreen()
+	{
+		QuizState state = started();
+
+		assertEquals(1.0, new QuizState().questionPlumeProgress(START), 0.0);
+		assertEquals(1.0, state.questionPlumeProgress(START.minusHours(1)), 0.0);
+		assertEquals(1.0, state.questionPlumeProgress(at(TOTAL)), 0.0);
+	}
+
+	@Test
+	public void theQuestionPlumeStaysBetweenZeroAndOne()
+	{
+		QuizState state = started();
+
+		for (long millis = -1000; millis <= TOTAL + 1000; millis += 7)
+		{
+			double plume = state.questionPlumeProgress(at(millis));
+			assertTrue("question plume too low at " + millis + "ms", plume >= 0.0);
+			assertTrue("question plume too high at " + millis + "ms", plume <= 1.0);
+		}
+	}
+
+	// --- the plume the answer lands on ------------------------------------
+
+	/**
+	 * Nothing has been blown yet, so there is no smoke to draw. Reading zero
+	 * here would sit a fresh cloud on the box for the whole thinking time,
+	 * and the overlay asks for this on every frame from the first one.
+	 */
+	@Test
+	public void theAnswerPlumeIsClearedBeforeTheAnswerAppears()
+	{
+		QuizState state = started();
+
+		// Sampled off the whole seconds as well: a plume that goes off early
+		// only shows up between the ticks.
+		for (long millis = 0; millis < ANSWER_START; millis += 13)
+		{
+			assertEquals("no smoke before the answer, at " + millis + "ms",
+				1.0, state.answerPlumeProgress(at(millis)), 0.0);
+		}
+		assertEquals(1.0, state.answerPlumeProgress(at(ANSWER_START - 1)), 0.0);
+	}
+
+	@Test
+	public void theAnswerPlumeIsFreshTheMomentTheAnswerAppears()
+	{
+		QuizState state = started();
+
+		assertTrue("precondition: the answer is up", state.answerVisible(at(ANSWER_START)));
+		assertEquals(0.0, state.answerPlumeProgress(at(ANSWER_START)), 0.0);
+	}
+
+	@Test
+	public void theAnswerPlumeClearsLinearly()
+	{
+		QuizState state = started();
+
+		assertEquals(0.1, state.answerPlumeProgress(at(ANSWER_START + 90)), 0.0001);
+		assertEquals(0.25, state.answerPlumeProgress(at(ANSWER_START + 225)), 0.0001);
+		assertEquals(0.5, state.answerPlumeProgress(at(ANSWER_START + 450)), 0.0001);
+		assertEquals(0.75, state.answerPlumeProgress(at(ANSWER_START + 675)), 0.0001);
+		assertEquals(0.9, state.answerPlumeProgress(at(ANSWER_START + 810)), 0.0001);
+	}
+
+	@Test
+	public void theAnswerPlumeClearsExactlyWhenItsTimeIsUp()
+	{
+		QuizState state = started();
+
+		assertTrue("still some smoke one millisecond earlier",
+			state.answerPlumeProgress(at(ANSWER_START + PLUME_MILLIS - 1)) < 1.0);
+		assertEquals(1.0, state.answerPlumeProgress(at(ANSWER_START + PLUME_MILLIS)), 0.0);
+	}
+
+	@Test
+	public void theAnswerPlumeStaysClearedForTheRestOfTheRun()
+	{
+		QuizState state = started();
+
+		assertEquals(1.0, state.answerPlumeProgress(at(ANSWER_START + PLUME_MILLIS + 1)), 0.0);
+		assertEquals(1.0, state.answerPlumeProgress(at(ANSWER_START + 5000)), 0.0);
+		assertEquals(1.0, state.answerPlumeProgress(at(FADE_START)), 0.0);
+		assertEquals(1.0, state.answerPlumeProgress(at(TOTAL - 1)), 0.0);
+	}
+
+	/** Kills a plume that hangs still and then vanishes in one step. */
+	@Test
+	public void theAnswerPlumeKeepsClearingThroughItsTime()
+	{
+		QuizState state = started();
+
+		double previous = state.answerPlumeProgress(at(ANSWER_START));
+		for (long millis = ANSWER_START + 10; millis < ANSWER_START + PLUME_MILLIS; millis += 10)
+		{
+			double current = state.answerPlumeProgress(at(millis));
+			assertTrue("the plume should have drifted on at " + millis + "ms,"
+					+ " was " + previous + " and is " + current,
+				current > previous);
+			previous = current;
+		}
+	}
+
+	@Test
+	public void theAnswerPlumeIsClearedWhenNothingIsOnScreen()
+	{
+		QuizState state = started();
+
+		assertEquals(1.0, new QuizState().answerPlumeProgress(START), 0.0);
+		assertEquals(1.0, state.answerPlumeProgress(START.minusHours(1)), 0.0);
+		assertEquals(1.0, state.answerPlumeProgress(at(TOTAL)), 0.0);
+	}
+
+	@Test
+	public void theAnswerPlumeStaysBetweenZeroAndOne()
+	{
+		QuizState state = started();
+
+		for (long millis = -1000; millis <= TOTAL + 1000; millis += 7)
+		{
+			double plume = state.answerPlumeProgress(at(millis));
+			assertTrue("answer plume too low at " + millis + "ms", plume >= 0.0);
+			assertTrue("answer plume too high at " + millis + "ms", plume <= 1.0);
+		}
+	}
+
+	// --- the two plumes are blown at different moments ---------------------
+
+	/**
+	 * The one mix-up that would look almost right: both plumes hanging off
+	 * the start of the run. At either moment exactly one of them is smoking.
+	 */
+	@Test
+	public void eachPlumeHangsOffItsOwnMoment()
+	{
+		QuizState state = started();
+
+		assertEquals(0.1, state.questionPlumeProgress(at(90)), 0.0001);
+		assertEquals("the answer plume has not been blown yet", 1.0,
+			state.answerPlumeProgress(at(90)), 0.0);
+
+		assertEquals("the question plume is long gone", 1.0,
+			state.questionPlumeProgress(at(ANSWER_START + 90)), 0.0);
+		assertEquals(0.1, state.answerPlumeProgress(at(ANSWER_START + 90)), 0.0001);
+	}
+
+	@Test
+	public void theAnswerPlumeFollowsTheConfiguredThinkingTime()
+	{
+		QuizState state = new QuizState();
+		state.start(START, QUESTION, Duration.ofSeconds(5), ANSWER);
+
+		long answerStart = SLIDE_MILLIS + 5000;
+		assertEquals(1.0, state.answerPlumeProgress(at(answerStart - 1)), 0.0);
+		assertEquals(0.0, state.answerPlumeProgress(at(answerStart)), 0.0);
+		assertEquals(0.5, state.answerPlumeProgress(at(answerStart + 450)), 0.0001);
+	}
+
+	@Test
+	public void bothPlumesAreClearedAfterAReset()
+	{
+		QuizState state = started();
+		state.reset();
+
+		assertEquals(1.0, state.questionPlumeProgress(at(90)), 0.0);
+		assertEquals(1.0, state.answerPlumeProgress(at(ANSWER_START + 90)), 0.0);
+	}
+
+	@Test
+	public void startingAgainBlowsAFreshQuestionPlume()
+	{
+		QuizState state = started();
+		assertEquals("precondition: the first plume has cleared", 1.0,
+			state.questionPlumeProgress(at(5000)), 0.0);
+
+		state.start(at(5000), OTHER_QUESTION, THINKING, ANSWER);
+
+		assertEquals(0.0, state.questionPlumeProgress(at(5000)), 0.0);
+		assertEquals(0.5, state.questionPlumeProgress(at(5450)), 0.0001);
+		assertEquals(1.0, state.answerPlumeProgress(at(5450)), 0.0);
+	}
+
+	/**
+	 * With no answer time at all the run ends while the answer plume is still
+	 * hanging. It may be cut off, but it may not read outside its range.
+	 */
+	@Test
+	public void theAnswerPlumeCopesWithARunThatEndsBeforeItHasCleared()
+	{
+		QuizState state = new QuizState();
+		state.start(START, QUESTION, THINKING, Duration.ZERO);
+
+		assertEquals(0.0, state.answerPlumeProgress(at(ANSWER_START)), 0.0);
+		assertTrue(state.answerPlumeProgress(at(ANSWER_START + 300)) > 0.0);
+		for (long millis = 0; millis <= ANSWER_START + FADE_MILLIS + 1000; millis += 3)
+		{
+			double plume = state.answerPlumeProgress(at(millis));
+			assertTrue("answer plume too low at " + millis + "ms", plume >= 0.0);
+			assertTrue("answer plume too high at " + millis + "ms", plume <= 1.0);
+		}
+	}
+
+	@Test
+	public void bothPlumesStayInRangeWithDurationsOfZero()
+	{
+		QuizState state = new QuizState();
+		state.start(START, QUESTION, Duration.ZERO, Duration.ZERO);
+
+		for (long millis = -100; millis <= SLIDE_MILLIS + FADE_MILLIS + 100; millis += 3)
+		{
+			double question = state.questionPlumeProgress(at(millis));
+			double answer = state.answerPlumeProgress(at(millis));
+			assertTrue("question plume out of range at " + millis + "ms",
+				question >= 0.0 && question <= 1.0);
+			assertTrue("answer plume out of range at " + millis + "ms",
+				answer >= 0.0 && answer <= 1.0);
+		}
+	}
+
+	/** Neither plume ever thickens again once it has begun to clear. */
+	@Test
+	public void neitherPlumeEverRollsBackIn()
+	{
+		QuizState state = started();
+
+		double previousQuestion = state.questionPlumeProgress(START);
+		double previousAnswer = state.answerPlumeProgress(at(ANSWER_START));
+		for (long millis = 5; millis < TOTAL; millis += 5)
+		{
+			double question = state.questionPlumeProgress(at(millis));
+			assertTrue("the question plume rolled back in at " + millis + "ms",
+				question >= previousQuestion);
+			previousQuestion = question;
+
+			if (millis >= ANSWER_START)
+			{
+				double answer = state.answerPlumeProgress(at(millis));
+				assertTrue("the answer plume rolled back in at " + millis + "ms",
+					answer >= previousAnswer);
+				previousAnswer = answer;
+			}
 		}
 	}
 
