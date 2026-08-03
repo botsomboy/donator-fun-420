@@ -1,13 +1,13 @@
-package com.example;
+package com.donator.fun420;
 
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 
-public class ExamplePluginTest
+public class Fun420PluginTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(ExamplePlugin.class);
+		ExternalPluginManager.loadBuiltin(Fun420Plugin.class);
 		RuneLite.main(args);
 	}
 }
