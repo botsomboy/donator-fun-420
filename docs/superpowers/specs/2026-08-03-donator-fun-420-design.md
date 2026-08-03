@@ -49,12 +49,27 @@ geen stroboscoop. Kleur en tekst zijn instelbaar; standaard groen met
 Op 20 april, van `00:00` tot `23:59` lokale tijd, staat er een groene balk
 bovenaan het spelscherm met "Happy 420 today" en een ×-knop rechts.
 
+De balk loopt over de volle breedte van het spelscherm en is ruim hoger dan een
+gewone melding, met grote vette tekst en een donkere contour eromheen zodat hij
+op elke achtergrond leesbaar blijft. 20 april hoort niet te fluisteren.
+
 **Wegklikken.** Een klik op de × verbergt de banner en slaat de datum van
 vandaag op. De banner blijft die kalenderdag weg, ook na een herstart van de
 client. Op 20 april van het volgende jaar verschijnt hij weer.
 
-**Samenloop.** Op 20 april om 16:20 zijn banner en alarm allebei zichtbaar. Ze
-delen geen state en beïnvloeden elkaar niet. Beide zijn los aan/uit te zetten.
+### Openingsmelding
+
+Log je op 20 april in, dan verschijnt daarnaast een grote tekst midden in beeld.
+Die blijft vijf seconden staan en vervaagt in de laatste seconde vanzelf; er is
+niets weg te klikken. Hij komt bij elke login op 20 april terug, dus ook na een
+wereldhop — de plugin onthoudt niets over deze melding.
+
+De melding verschijnt ook zodra je de simulatieschakelaar aanzet, zodat hij op
+een willekeurige dag te beoordelen is zonder opnieuw in te loggen.
+
+**Samenloop.** Op 20 april om 16:20 kunnen alarm, banner en openingsmelding
+tegelijk zichtbaar zijn. Ze delen geen state en beïnvloeden elkaar niet. Alle
+drie zijn los aan en uit te zetten in de instellingen.
 
 ## Architectuur
 
@@ -86,7 +101,13 @@ de eventueel opgeslagen datum waarop de banner is weggeklikt. Neemt zelf geen
 klikken aan en slaat niets op — dat doet de plugin — maar de beslissing zelf is
 pure logica en dus testbaar zonder client.
 
-### `AlarmOverlay` en `BannerOverlay` (weergave)
+### `IntroState` (pure logica)
+
+Houdt bij wanneer de openingsmelding startte. Levert: is hij nu zichtbaar, en
+met welke dekking (vol tot de laatste seconde, daarna aflopend naar nul). Zelfde
+vorm als `AlarmState` en net zo testbaar zonder client.
+
+### `AlarmOverlay`, `BannerOverlay` en `IntroOverlay` (weergave)
 
 Tekenen uitsluitend. Ze bevatten geen tijdlogica en nemen geen beslissingen
 over wanneer iets zichtbaar is; ze lezen de state en de config. `BannerOverlay`
@@ -110,14 +131,16 @@ Config-groep: `donatorfun420`. Drie secties:
 **Alarm** — inschakelen (standaard aan), kleur (standaard groen), tekst
 (standaard "4:20 — blaze it").
 
-**Banner** — inschakelen (standaard aan), kleur (standaard groen), tekst
-(standaard "Happy 420 today").
+**Banner** — inschakelen (standaard aan), de openingsmelding apart inschakelen
+(standaard aan), kleur (standaard groen), tekst (standaard "Happy 420 today").
+Balk en openingsmelding delen kleur en tekst; wie er één uitzet, houdt de ander.
 
 **Testen** — twee schakelaars, zichtbaar in de gepubliceerde versie:
 
 - *Alarm nu*: start het alarm direct en zet zichzelf daarna terug op uit.
 - *Simuleer 20 april*: zolang deze aan staat doet de klok alsof het 20 april
-  is, zodat de banner te beoordelen is op een willekeurige dag.
+  is, zodat de banner te beoordelen is op een willekeurige dag. Het aanzetten
+  start meteen ook de openingsmelding.
 
 **Verborgen state** — de datum waarop de banner is weggeklikt, als ISO-tekst
 (bijvoorbeeld `2027-04-20`), opgeslagen via de RuneLite-configopslag. Bij het
@@ -137,6 +160,9 @@ plugin: er is geen netwerk, geen bestandsopslag en geen externe dependency.
 - schrikkeljaren veranderen niets aan de datumherkenning
 - een weggeklikte banner blijft weg op dezelfde datum en verschijnt weer op de
   volgende 20 april
+- de openingsmelding is vijf seconden zichtbaar en daarna niet meer
+- haar dekking is vol tot de laatste seconde en loopt daarin af naar nul
+- opnieuw starten zet de vijf seconden opnieuw aan
 
 **Dev-client** (`./gradlew run`): een echte RuneLite met de plugin geladen, voor
 het visuele oordeel over rand, puls, tekst en banner. Inloggen gebeurt met een
