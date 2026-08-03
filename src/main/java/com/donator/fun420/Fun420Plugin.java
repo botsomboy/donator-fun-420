@@ -2,6 +2,7 @@ package com.donator.fun420;
 
 import com.google.inject.Provides;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import javax.inject.Inject;
 import lombok.Getter;
@@ -51,6 +52,9 @@ public class Fun420Plugin extends Plugin
 	private BannerOverlay bannerOverlay;
 
 	@Inject
+	private IntroOverlay introOverlay;
+
+	@Inject
 	private BannerMouseListener bannerMouseListener;
 
 	@Getter
@@ -58,6 +62,11 @@ public class Fun420Plugin extends Plugin
 
 	@Getter
 	private final AlarmState alarmState = new AlarmState();
+
+	@Getter
+	private final IntroState introState = new IntroState();
+
+	private final ArrivalDetector arrivalDetector = new ArrivalDetector();
 
 	/**
 	 * The date on which the player clicked the banner away, or null if never.
@@ -104,8 +113,13 @@ public class Fun420Plugin extends Plugin
 	{
 		// Loads bannerDismissedOn as well; see applySimulation.
 		applySimulation();
+		// Taken from the live state instead of assumed: enabling the plugin
+		// while already logged in must not make the next region load look like
+		// an arrival.
+		arrivalDetector.seed(client.getGameState());
 		overlayManager.add(alarmOverlay);
 		overlayManager.add(bannerOverlay);
+		overlayManager.add(introOverlay);
 		mouseManager.registerMouseListener(bannerMouseListener);
 		log.debug("Donator - Fun 420 started");
 	}
@@ -116,7 +130,10 @@ public class Fun420Plugin extends Plugin
 		mouseManager.unregisterMouseListener(bannerMouseListener);
 		overlayManager.remove(alarmOverlay);
 		overlayManager.remove(bannerOverlay);
+		overlayManager.remove(introOverlay);
 		alarmState.reset();
+		introState.reset();
+		arrivalDetector.reset();
 		clock.useRealDate();
 		log.debug("Donator - Fun 420 stopped");
 	}
@@ -127,30 +144,45 @@ public class Fun420Plugin extends Plugin
 		alarmState.update(clock.now(), isInGame());
 	}
 
+	/**
+	 * Routes a state change: leaving the game clears what is on screen, and
+	 * arriving in it starts the opening message. Which state changes count as
+	 * arriving is {@link ArrivalDetector}'s judgement, not this method's.
+	 */
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
-		if (!isInGame(event.getGameState()))
+		GameState state = event.getGameState();
+
+		if (!ArrivalDetector.isInGame(state))
 		{
 			alarmState.reset();
+			introState.reset();
+		}
+
+		if (arrivalDetector.onState(state))
+		{
+			startIntro();
+		}
+	}
+
+	/**
+	 * Shows the opening message if the calendar says April 20. Deliberately
+	 * blind to the setting that hides it: the state stays a plain record of
+	 * what happened and the overlay decides whether it is drawn.
+	 */
+	private void startIntro()
+	{
+		LocalDateTime now = clock.now();
+		if (Fun420Clock.isBannerDay(now.toLocalDate()))
+		{
+			introState.start(now);
 		}
 	}
 
 	private boolean isInGame()
 	{
-		return isInGame(client.getGameState());
-	}
-
-	/**
-	 * Whether the player is in the game, which is what clears the alarm when it
-	 * turns false. LOADING counts as being in the game: the client enters it on
-	 * every region change, and running across a map border is not logging out,
-	 * so it must not cut a running alarm short. Shared by the tick and the state
-	 * change so that the two cannot disagree about what counts as logged out.
-	 */
-	private static boolean isInGame(GameState state)
-	{
-		return state == GameState.LOGGED_IN || state == GameState.LOADING;
+		return ArrivalDetector.isInGame(client.getGameState());
 	}
 
 	@Subscribe
@@ -180,6 +212,12 @@ public class Fun420Plugin extends Plugin
 		if (Fun420Config.KEY_SIMULATE_APRIL_20.equals(event.getKey()))
 		{
 			applySimulation();
+			if (config.simulateApril20())
+			{
+				// Switching the preview on stands in for a login, so that the
+				// opening message can be judged without leaving the game.
+				startIntro();
+			}
 		}
 
 		// Any other key of this group, including the hidden dismissal date the
@@ -207,6 +245,12 @@ public class Fun420Plugin extends Plugin
 		// close the preview and was never stored. A real dismissal was stored
 		// and comes straight back.
 		bannerDismissedOn = readDismissedDate();
+		// A running preview of the opening message needs no reset here. Its
+		// start moment was taken from the simulated clock and therefore sits on
+		// April 20, so against the real calendar it is either months in the
+		// past or months in the future: both read as inactive at once. Only on
+		// the real April 20 do the two calendars agree, and there the message
+		// is meant to keep running anyway.
 	}
 
 	private LocalDate readDismissedDate()

@@ -92,13 +92,25 @@ public interface Fun420Config extends Config
 		return true;
 	}
 
+	@ConfigItem(
+		keyName = "bannerIntroEnabled",
+		name = "Enable login message",
+		description = "Show a large message in the middle of the screen when you log in on April 20",
+		section = bannerSection,
+		position = 1
+	)
+	default boolean bannerIntroEnabled()
+	{
+		return true;
+	}
+
 	@Alpha
 	@ConfigItem(
 		keyName = "bannerColor",
 		name = "Banner colour",
-		description = "Background colour of the banner",
+		description = "Background colour of the banner and colour of the login message",
 		section = bannerSection,
-		position = 1
+		position = 2
 	)
 	default Color bannerColor()
 	{
@@ -108,9 +120,9 @@ public interface Fun420Config extends Config
 	@ConfigItem(
 		keyName = "bannerText",
 		name = "Banner text",
-		description = "Text shown in the banner",
+		description = "Text shown in the banner and in the login message",
 		section = bannerSection,
-		position = 2
+		position = 3
 	)
 	default String bannerText()
 	{

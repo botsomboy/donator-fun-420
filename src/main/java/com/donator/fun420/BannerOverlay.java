@@ -1,5 +1,6 @@
 package com.donator.fun420;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -7,6 +8,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.Shape;
+import java.awt.Stroke;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -28,11 +30,23 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 @Singleton
 public class BannerOverlay extends Overlay
 {
-	private static final int HEIGHT = 28;
-	private static final int PADDING = 10;
-	private static final int CLOSE_SIZE = 14;
-	private static final int CLOSE_MARGIN = 8;
-	private static final float TEXT_SIZE = 16f;
+	private static final int HEIGHT = 72;
+	private static final int PADDING = 20;
+	private static final int CLOSE_SIZE = 30;
+	private static final int CLOSE_MARGIN = 20;
+	private static final float TEXT_SIZE = 38f;
+	private static final int OUTLINE_OFFSET = 2;
+	private static final int CLOSE_STROKE_WIDTH = 3;
+
+	/**
+	 * How far the drawn cross bleeds past its own endpoints: half the stroke,
+	 * rounded up. The click target has to cover that bleed, or the outer pixels
+	 * of the visible cross are not clickable.
+	 */
+	private static final int CLOSE_STROKE_BLEED = (CLOSE_STROKE_WIDTH + 1) / 2;
+
+	/** The width never varies and a stroke is immutable, so it is built once instead of per frame. */
+	private static final Stroke CLOSE_STROKE = new BasicStroke(CLOSE_STROKE_WIDTH);
 
 	/** Published while the banner is not drawn, so any hit test misses. */
 	private static final Rectangle NO_CLOSE_BUTTON = new Rectangle();
@@ -87,36 +101,72 @@ public class BannerOverlay extends Overlay
 		String text = config.bannerText();
 		FontMetrics metrics = graphics.getFontMetrics();
 
-		int canvasWidth = client.getCanvasWidth();
-		int bannerWidth = Math.min(
-			canvasWidth,
-			metrics.stringWidth(text) + (PADDING * 2) + CLOSE_SIZE + CLOSE_MARGIN);
-		int x = (canvasWidth - bannerWidth) / 2;
+		// Full width, so April 20 does not whisper.
+		int bannerWidth = client.getCanvasWidth();
 
 		graphics.setColor(config.bannerColor());
-		graphics.fillRect(x, 0, bannerWidth, HEIGHT);
+		graphics.fillRect(0, 0, bannerWidth, HEIGHT);
 		graphics.setColor(Color.BLACK);
-		graphics.drawRect(x, 0, bannerWidth - 1, HEIGHT - 1);
+		graphics.drawRect(0, 0, bannerWidth - 1, HEIGHT - 1);
 
+		int closeX = bannerWidth - CLOSE_SIZE - CLOSE_MARGIN;
+		int closeY = (HEIGHT - CLOSE_SIZE) / 2;
+
+		// Centred between the left padding and the cross rather than on the
+		// canvas: a text that just fits the free room would otherwise still
+		// end up half under the cross and be clipped away.
+		int textAreaX = PADDING;
+		int textAreaWidth = Math.max(0, closeX - PADDING - textAreaX);
+		// Centred while it fits, and against the left edge once it does not, so
+		// that an overlong text loses its tail instead of its opening words.
+		int textX = textAreaX + Math.max(0, (textAreaWidth - metrics.stringWidth(text)) / 2);
 		int textY = ((HEIGHT - metrics.getHeight()) / 2) + metrics.getAscent();
-		graphics.setColor(Color.WHITE);
 
-		// A banner clamped to the canvas width has less room than the text
-		// needs; clip it to its own area so it cannot run under the cross.
-		int textWidth = bannerWidth - (PADDING * 2) - CLOSE_SIZE - CLOSE_MARGIN;
+		// A configured text longer than the free room is clipped to that room,
+		// so it can neither run under the cross nor off the canvas.
 		Shape originalClip = graphics.getClip();
-		graphics.clipRect(x + PADDING, 0, textWidth, HEIGHT);
-		graphics.drawString(text, x + PADDING, textY);
+		graphics.clipRect(textAreaX, 0, textAreaWidth, HEIGHT);
+		graphics.setColor(Color.BLACK);
+		drawOutline(graphics, text, textX, textY);
+		graphics.setColor(Color.WHITE);
+		graphics.drawString(text, textX, textY);
 		graphics.setClip(originalClip);
 
-		int closeX = x + bannerWidth - CLOSE_SIZE - CLOSE_MARGIN;
-		int closeY = (HEIGHT - CLOSE_SIZE) / 2;
-		closeButton = new Rectangle(closeX, closeY, CLOSE_SIZE, CLOSE_SIZE);
+		// Grown by the bleed of the stroke, so that every pixel of the cross
+		// the player can see is a pixel the player can click.
+		closeButton = new Rectangle(
+			closeX - CLOSE_STROKE_BLEED,
+			closeY - CLOSE_STROKE_BLEED,
+			CLOSE_SIZE + (CLOSE_STROKE_BLEED * 2),
+			CLOSE_SIZE + (CLOSE_STROKE_BLEED * 2));
+		Stroke originalStroke = graphics.getStroke();
+		graphics.setStroke(CLOSE_STROKE);
 		// Still the text colour: the cross reads as part of the banner text.
 		graphics.drawLine(closeX, closeY, closeX + CLOSE_SIZE, closeY + CLOSE_SIZE);
 		graphics.drawLine(closeX + CLOSE_SIZE, closeY, closeX, closeY + CLOSE_SIZE);
+		graphics.setStroke(originalStroke);
 
 		graphics.setFont(originalFont);
 		return null;
+	}
+
+	/**
+	 * Draws the text once at each of the eight surrounding offsets, which
+	 * gives an outline all the way around. A single offset would only be a
+	 * drop shadow, leaving the top left of the glyphs to blend into a light
+	 * background. The caller sets the colour.
+	 */
+	private static void drawOutline(Graphics2D graphics, String text, int x, int y)
+	{
+		for (int dx = -OUTLINE_OFFSET; dx <= OUTLINE_OFFSET; dx += OUTLINE_OFFSET)
+		{
+			for (int dy = -OUTLINE_OFFSET; dy <= OUTLINE_OFFSET; dy += OUTLINE_OFFSET)
+			{
+				if (dx != 0 || dy != 0)
+				{
+					graphics.drawString(text, x + dx, y + dy);
+				}
+			}
+		}
 	}
 }
