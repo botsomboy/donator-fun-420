@@ -76,6 +76,19 @@ dat blijft 10 seconden staan, waarna het geheel wegvervaagt. Interval,
 bedenktijd en antwoordtijd zijn alle drie instelbaar, net als de hoek waarin
 het vakje verschijnt (standaard linksboven).
 
+**Rook.** Vraag en antwoord komen allebei binnen alsof ze naar binnen geblazen
+worden. Tijdens het inschuiven rolt er een pluim met het vakje mee die daarna
+optrekt; de tekst wordt leesbaar naarmate de rook wegdrijft. Als het antwoord
+verschijnt volgt een tweede pluim, nu op zijn plek, want het vakje staat dan al
+stil.
+
+De pluim is getekend, geen meegeleverde afbeelding: een handvol doorschijnende
+cirkels die opzwellen, wegdrijven en vervagen. Dat scheelt geheugen en een
+resource-bestand dat de Plugin Hub apart zou moeten beoordelen. Hoe ver een
+pluim is opgetrokken is — net als het inschuiven en het aftellen — een getal
+tussen 0 en 1 dat `QuizState` uitrekent, zodat ook de rook zonder client te
+testen is.
+
 De teller loopt alleen terwijl je ingelogd bent en begint opnieuw zodra een
 vraag is afgelopen — anders krijg je na een avond offline een reeks vragen
 achter elkaar.
@@ -217,6 +230,8 @@ plugin: er is geen netwerk, geen bestandsopslag en geen externe dependency.
 - de quiz doorloopt inschuiven, bedenktijd, antwoord en wegvervagen op de
   ingestelde momenten, en is daarna niet meer zichtbaar
 - het aftelbalkje loopt van vol naar leeg over precies de ingestelde bedenktijd
+- beide rookpluimen trekken op van 0 naar 1 en blijven daarna opgetrokken; de
+  tweede begint precies wanneer het antwoord verschijnt
 
 **Dev-client** (`./gradlew run`): een echte RuneLite met de plugin geladen, voor
 het visuele oordeel over rand, puls, tekst en banner. Inloggen gebeurt met een
