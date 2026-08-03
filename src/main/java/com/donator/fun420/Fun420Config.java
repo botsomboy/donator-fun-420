@@ -19,6 +19,7 @@ public interface Fun420Config extends Config
 	String KEY_TEST_ALARM = "testAlarm";
 	String KEY_SIMULATE_APRIL_20 = "simulateApril20";
 	String KEY_TEST_QUIZ = "testQuiz";
+	String KEY_QUIZ_ENABLED = "quizEnabled";
 
 	// Hidden persisted state, written by the plugin through ConfigManager.
 	// Deliberately has no @ConfigItem: it is not a user-facing setting.
@@ -140,7 +141,7 @@ public interface Fun420Config extends Config
 	}
 
 	@ConfigItem(
-		keyName = "quizEnabled",
+		keyName = KEY_QUIZ_ENABLED,
 		name = "Enable quiz",
 		description = "Slide a 420 question into the screen every so often",
 		section = quizSection,
@@ -235,7 +236,7 @@ public interface Fun420Config extends Config
 	@ConfigItem(
 		keyName = KEY_TEST_QUIZ,
 		name = "Show a question now",
-		description = "Shows a quiz question immediately and switches itself back off",
+		description = "Shows a quiz question immediately, switching the quiz on if it is off, and switches itself back off",
 		section = testSection,
 		position = 2
 	)

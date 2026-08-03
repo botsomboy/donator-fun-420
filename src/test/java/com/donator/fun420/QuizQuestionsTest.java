@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -170,6 +171,74 @@ public class QuizQuestionsTest
 			assertTrue("not phrased as a question: " + question.getQuestion(),
 				question.getQuestion().endsWith("?"));
 		}
+	}
+
+	/**
+	 * Wordings that turn a fact into a suggestion. The deck states what is so
+	 * and never tells the player to do anything with it, which is a large part
+	 * of why it can be published at all; every other property of the list is
+	 * pinned by a test, and this is the one that actually matters.
+	 * <p>
+	 * Whole words only: "try" hides inside "country", which is in the deck and
+	 * is perfectly neutral. "high" is a phrase rather than a word here for the
+	 * same reason from the other side: the deck names both the high school the
+	 * term came from and the magazine High Times, so only "get high" and its
+	 * forms can be denied.
+	 */
+	private static final String[] READS_AS_ADVICE = {
+		"advice", "advise", "buy", "dose", "encourage", "enjoy", "get high",
+		"gets you high", "getting high", "how to", "light up", "recommend",
+		"recommended", "recommends", "should", "smoke", "smoking", "toke",
+		"try", "trying", "you", "your",
+	};
+
+	@Test
+	public void tellsNobodyToDoAnything()
+	{
+		for (QuizQuestion question : QuizQuestions.ALL)
+		{
+			assertNoAdvice("question", question.getQuestion());
+			assertNoAdvice("answer", question.getAnswer());
+		}
+	}
+
+	/**
+	 * Proves the guard above has teeth. A deny list that matched nothing would
+	 * pass over the whole deck just as quietly as one that works.
+	 */
+	@Test
+	public void theGuardCatchesAdviceWhenThereIsAny()
+	{
+		assertTrue(readsAsAdvice("You should give it a go."));
+		assertTrue(readsAsAdvice("Smoke it with friends."));
+		assertTrue(readsAsAdvice("Enjoy responsibly."));
+		assertTrue(readsAsAdvice("Here is how to grow one."));
+		assertTrue(readsAsAdvice("We recommend the first."));
+		assertFalse(readsAsAdvice(
+			"Uruguay, whose law was passed in December 2013."));
+	}
+
+	private static void assertNoAdvice(String what, String text)
+	{
+		if (readsAsAdvice(text))
+		{
+			fail("reads as advice or encouragement in " + what + ": " + text);
+		}
+	}
+
+	private static boolean readsAsAdvice(String text)
+	{
+		String lower = text.toLowerCase();
+		for (String term : READS_AS_ADVICE)
+		{
+			// Whole words, so that a term cannot match halfway through an
+			// innocent one. Word characters on either side rule that out.
+			if (lower.matches(".*\\b" + term + "\\b.*"))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Test

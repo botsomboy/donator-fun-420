@@ -39,8 +39,8 @@ public final class QuizQuestions
 			"Which magazine helped popularize \"420\" in the early 1990s?",
 			"High Times, which printed a flyer using the term and then took it up itself."),
 		new QuizQuestion(
-			"What day is 4/20 on the calendar?",
-			"April 20, marked as an unofficial cannabis holiday in many countries."),
+			"Which 1937 United States law first taxed cannabis nationally?",
+			"The Marihuana Tax Act, which taxed it out of practical use rather than banning it outright."),
 		new QuizQuestion(
 			"What did Colorado do with its Mile 420 highway marker?",
 			"It put up a sign reading 419.99 instead, because the original kept being stolen."),

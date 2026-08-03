@@ -75,19 +75,19 @@ public class Fun420Plugin extends Plugin
 	@Getter
 	private final IntroState introState = new IntroState();
 
-	@Getter
-	private final QuizState quizState = new QuizState();
-
 	private final ArrivalDetector arrivalDetector = new ArrivalDetector();
 
-	private final QuizSchedule quizSchedule = new QuizSchedule();
-
 	/**
-	 * Plainly seeded: which question comes up is meant to be unpredictable,
-	 * and nothing here has to be reproducible between clients. Tests that need
-	 * a fixed order build their own deck.
+	 * Owns the quiz: the deck, the timer and the box. The plugin hands it the
+	 * moment, what it knows about the client and the settings, and nothing
+	 * else; when a question appears is its judgement, not this class's.
+	 * <p>
+	 * The deck is plainly seeded: which question comes up is meant to be
+	 * unpredictable, and nothing here has to be reproducible between clients.
+	 * Tests that need a fixed order build their own deck.
 	 */
-	private final QuizDeck quizDeck = new QuizDeck(QuizQuestions.ALL, new Random());
+	private final QuizDirector quizDirector =
+		new QuizDirector(new QuizDeck(QuizQuestions.ALL, new Random()));
 
 	/**
 	 * The date on which the player clicked the banner away, or null if never.
@@ -95,6 +95,12 @@ public class Fun420Plugin extends Plugin
 	 * that renders, matching {@link AlarmState} and {@link Fun420Clock}.
 	 */
 	private volatile LocalDate bannerDismissedOn;
+
+	/** The box {@link QuizOverlay} draws; the director owns it. */
+	public QuizState getQuizState()
+	{
+		return quizDirector.getState();
+	}
 
 	public boolean isBannerVisible()
 	{
@@ -156,8 +162,7 @@ public class Fun420Plugin extends Plugin
 		overlayManager.remove(quizOverlay);
 		alarmState.reset();
 		introState.reset();
-		quizState.reset();
-		quizSchedule.reset();
+		quizDirector.reset();
 		arrivalDetector.reset();
 		clock.useRealDate();
 		log.debug("Donator - Fun 420 stopped");
@@ -168,70 +173,16 @@ public class Fun420Plugin extends Plugin
 	{
 		boolean inGame = isInGame();
 		alarmState.update(clock.now(), inGame);
-		updateQuiz(inGame);
-	}
-
-	/**
-	 * Puts a question on screen when one is due. Everything it asks is asked
-	 * of somebody else: whether a box is up is {@link QuizState}'s answer and
-	 * whether the wait is over is {@link QuizSchedule}'s.
-	 * <p>
-	 * Runs on the real calendar rather than on {@link Fun420Clock#now()}: the
-	 * April 20 preview moves that clock by months, and a run measured from a
-	 * moment on the simulated calendar would end the instant the preview was
-	 * switched on or off.
-	 */
-	private void updateQuiz(boolean inGame)
-	{
-		if (!inGame || !config.quizEnabled())
-		{
-			// The wait only runs while there is something to wait for, so
-			// switching the quiz off stops the timer. Switching it back on
-			// then costs a whole interval instead of putting a question on
-			// screen on the spot for the time it was off.
-			quizSchedule.reset();
-			return;
-		}
-
-		LocalDateTime now = clock.realNow();
-
-		if (quizState.isActive(now))
-		{
-			// The wait for the next question begins when this one is gone, so
-			// the timer is held at the current moment for as long as a box is
-			// on screen. That also settles what "two runs at once" would mean:
-			// there is no path to a second one while the first is up.
-			quizSchedule.restart(now);
-			return;
-		}
-
-		// Starts the wait on the first tick in the game and leaves a running
-		// one alone, so that the first question of a session is a full
-		// interval away rather than immediate.
-		quizSchedule.startIfNotRunning(now);
-
-		if (quizSchedule.isDue(now, Duration.ofMinutes(config.quizIntervalMinutes())))
-		{
-			startQuiz(now);
-		}
-	}
-
-	/**
-	 * Deals a question and puts it on screen, whatever the timer says.
-	 * <p>
-	 * Client thread only, because {@link QuizDeck#draw()} is.
-	 */
-	private void startQuiz(LocalDateTime now)
-	{
-		quizState.start(
-			now,
-			quizDeck.draw(),
+		// On the real calendar, never on the simulated one: the April 20
+		// preview moves that clock by months, and a run measured from a moment
+		// on the simulated calendar would end the instant the preview flipped.
+		quizDirector.onTick(
+			clock.realNow(),
+			inGame,
+			config.quizEnabled(),
+			Duration.ofMinutes(config.quizIntervalMinutes()),
 			Duration.ofSeconds(config.quizThinkingSeconds()),
 			Duration.ofSeconds(config.quizAnswerSeconds()));
-		// The wait restarts here as well as on every tick the box is up, so
-		// that a run which somehow saw no tick at all still costs an interval.
-		quizSchedule.restart(now);
-		log.debug("420 quiz question shown at {}", now);
 	}
 
 	/**
@@ -248,11 +199,10 @@ public class Fun420Plugin extends Plugin
 		{
 			alarmState.reset();
 			introState.reset();
-			quizState.reset();
-			// Stops the wait as well as the box: a timer that kept running
-			// while logged out would greet the next login with a question, and
-			// after a night away with one every interval it had "missed".
-			quizSchedule.reset();
+			// Stops the wait as well as clearing the box: a timer that kept
+			// running while logged out would greet the next login with a
+			// question, and after a night away with every one it had "missed".
+			quizDirector.reset();
 		}
 
 		if (arrivalDetector.onState(state))
@@ -310,10 +260,24 @@ public class Fun420Plugin extends Plugin
 			// event carries, so that switching the item back off cannot loop.
 			if (CONFIG_TRUE.equals(event.getNewValue()))
 			{
+				if (!config.quizEnabled())
+				{
+					// The button says it shows a question, so it shows one. It
+					// used to deal a card into a box the overlay was told not
+					// to draw, which looks exactly like a broken button.
+					configManager.setConfiguration(
+						Fun420Config.GROUP,
+						Fun420Config.KEY_QUIZ_ENABLED,
+						true);
+				}
+
 				// Handed to the client thread because the deck deals there
 				// only, while a switch in the settings panel is flipped on the
 				// thread that draws that panel.
-				clientThread.invoke(() -> startQuiz(clock.realNow()));
+				clientThread.invoke(() -> quizDirector.showNow(
+					clock.realNow(),
+					Duration.ofSeconds(config.quizThinkingSeconds()),
+					Duration.ofSeconds(config.quizAnswerSeconds())));
 				configManager.setConfiguration(
 					Fun420Config.GROUP,
 					Fun420Config.KEY_TEST_QUIZ,
