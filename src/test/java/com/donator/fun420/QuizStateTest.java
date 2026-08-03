@@ -206,6 +206,21 @@ public class QuizStateTest
 		assertEquals(0.01, state.thinkingRemaining(at(SLIDE_MILLIS + 9900)), 0.0001);
 	}
 
+	/**
+	 * Both sides of the moment the bar empties. Asserting only that it reads
+	 * zero at the boundary would hold just as well for a bar that emptied a
+	 * millisecond early, so the millisecond before it has to be above zero.
+	 */
+	@Test
+	public void thinkingRemainingReachesZeroExactlyWhenTheThinkingEnds()
+	{
+		QuizState state = started();
+
+		assertTrue("the bar should not be empty yet one millisecond earlier",
+			state.thinkingRemaining(at(SLIDE_MILLIS + 9999)) > 0.0);
+		assertEquals(0.0, state.thinkingRemaining(at(SLIDE_MILLIS + 10_000)), 0.0);
+	}
+
 	@Test
 	public void thinkingRemainingIsEmptyOnceTheThinkingIsOver()
 	{
@@ -324,6 +339,21 @@ public class QuizStateTest
 		assertEquals(0.5, state.opacity(at(FADE_START + 300)), 0.0001);
 		assertEquals(0.25, state.opacity(at(FADE_START + 450)), 0.0001);
 		assertEquals(0.1, state.opacity(at(FADE_START + 540)), 0.0001);
+	}
+
+	/**
+	 * Both sides of the moment the fade begins. Full opacity at the boundary
+	 * holds just as well for a fade that starts a millisecond later, so the
+	 * millisecond after it has to be below full.
+	 */
+	@Test
+	public void opacityStartsFallingExactlyWhenTheAnswerTimeIsUp()
+	{
+		QuizState state = started();
+
+		assertEquals(1.0, state.opacity(at(FADE_START)), 0.0);
+		assertTrue("the fade should have begun one millisecond later",
+			state.opacity(at(FADE_START + 1)) < 1.0);
 	}
 
 	/** Kills an opacity that holds at one and drops only at the very end. */
