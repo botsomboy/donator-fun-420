@@ -67,9 +67,36 @@ wereldhop — de plugin onthoudt niets over deze melding.
 De melding verschijnt ook zodra je de simulatieschakelaar aanzet, zodat hij op
 een willekeurige dag te beoordelen is zonder opnieuw in te loggen.
 
-**Samenloop.** Op 20 april om 16:20 kunnen alarm, banner en openingsmelding
-tegelijk zichtbaar zijn. Ze delen geen state en beïnvloeden elkaar niet. Alle
-drie zijn los aan en uit te zetten in de instellingen.
+### Quiz
+
+Elke 15 minuten schuift er een vakje het scherm in vanaf de dichtstbijzijnde
+zijkant, met daarin een vraag en eronder een balkje dat in 10 seconden
+leegloopt. Zodra dat balkje leeg is verschijnt het antwoord in hetzelfde vakje;
+dat blijft 10 seconden staan, waarna het geheel wegvervaagt. Interval,
+bedenktijd en antwoordtijd zijn alle drie instelbaar, net als de hoek waarin
+het vakje verschijnt (standaard linksboven).
+
+De teller loopt alleen terwijl je ingelogd bent en begint opnieuw zodra een
+vraag is afgelopen — anders krijg je na een avond offline een reeks vragen
+achter elkaar.
+
+**De vragen.** Een meegeleverde lijst van ongeveer 25 vraag-antwoordparen. Ze
+worden geschud en zonder herhaling uitgedeeld tot de stapel op is, waarna
+opnieuw geschud wordt; puur willekeurig kiezen levert binnen een uur dezelfde
+vraag twee keer op.
+
+De toon is feitelijk — herkomst van de term, botanie, wetgeving, etymologie —
+en bevat geen gebruiksadvies of aansporing. Voorbeeld van een paar:
+
+> **V:** What does "420" symbolize in cannabis culture?
+> **A:** A time and code for consumption, originating from high school students.
+
+Er is geen netwerkverkeer en geen bestand: de lijst is een constante in de
+plugin.
+
+**Samenloop.** Op 20 april om 16:20 kunnen alarm, banner, openingsmelding en
+quiz tegelijk zichtbaar zijn. Ze delen geen state en beïnvloeden elkaar niet.
+Alle vier zijn los aan en uit te zetten in de instellingen.
 
 ## Architectuur
 
@@ -107,7 +134,24 @@ Houdt bij wanneer de openingsmelding startte. Levert: is hij nu zichtbaar, en
 met welke dekking (vol tot de laatste seconde, daarna aflopend naar nul). Zelfde
 vorm als `AlarmState` en net zo testbaar zonder client.
 
-### `AlarmOverlay`, `BannerOverlay` en `IntroOverlay` (weergave)
+### `QuizDeck` en `QuizState` (pure logica)
+
+`QuizDeck` schudt de vraag-antwoordparen en deelt ze uit zonder herhaling tot
+de stapel op is. Hij krijgt zijn `Random` mee, zodat een test met een vaste
+seed kan vastleggen dat een herhaling pas na de hele stapel optreedt.
+
+`QuizState` heeft dezelfde vorm als `AlarmState` en `IntroState`: gegeven een
+startmoment en de drie ingestelde duren levert hij per tijdstip de fase, hoe
+ver het vakje is ingeschoven (0 tot 1), hoeveel bedenktijd er nog over is
+(1 tot 0) en de dekking tijdens het wegvervagen. De animatie is dus rekenwerk
+dat zonder client te testen is.
+
+De quiz hangt bewust **niet** aan het simulatiepad van `Fun420Clock`. Die klok
+verspringt naar 20 april, en een animatie die haar startmoment op een
+gesimuleerde datum vastlegt, verdwijnt op slag zodra de schakelaar omgaat. De
+quiz heeft daarom een eigen testknop.
+
+### `AlarmOverlay`, `BannerOverlay`, `IntroOverlay` en `QuizOverlay` (weergave)
 
 Tekenen uitsluitend. Ze bevatten geen tijdlogica en nemen geen beslissingen
 over wanneer iets zichtbaar is; ze lezen de state en de config. `BannerOverlay`
@@ -135,12 +179,17 @@ Config-groep: `donatorfun420`. Drie secties:
 (standaard aan), kleur (standaard groen), tekst (standaard "Happy 420 today").
 Balk en openingsmelding delen kleur en tekst; wie er één uitzet, houdt de ander.
 
-**Testen** — twee schakelaars, zichtbaar in de gepubliceerde versie:
+**Quiz** — inschakelen (standaard aan), interval in minuten (standaard 15),
+bedenktijd in seconden (standaard 10), antwoordtijd in seconden (standaard 10),
+en de hoek waarin het vakje verschijnt (standaard linksboven).
+
+**Testen** — drie schakelaars, zichtbaar in de gepubliceerde versie:
 
 - *Alarm nu*: start het alarm direct en zet zichzelf daarna terug op uit.
 - *Simuleer 20 april*: zolang deze aan staat doet de klok alsof het 20 april
   is, zodat de banner te beoordelen is op een willekeurige dag. Het aanzetten
   start meteen ook de openingsmelding.
+- *Vraag nu*: toont direct een quizvraag en zet zichzelf daarna terug op uit.
 
 **Verborgen state** — de datum waarop de banner is weggeklikt, als ISO-tekst
 (bijvoorbeeld `2027-04-20`), opgeslagen via de RuneLite-configopslag. Bij het
@@ -163,6 +212,11 @@ plugin: er is geen netwerk, geen bestandsopslag en geen externe dependency.
 - de openingsmelding is vijf seconden zichtbaar en daarna niet meer
 - haar dekking is vol tot de laatste seconde en loopt daarin af naar nul
 - opnieuw starten zet de vijf seconden opnieuw aan
+- de quiz-stapel geeft pas een herhaling nadat alle vragen zijn geweest, en
+  schudt daarna opnieuw
+- de quiz doorloopt inschuiven, bedenktijd, antwoord en wegvervagen op de
+  ingestelde momenten, en is daarna niet meer zichtbaar
+- het aftelbalkje loopt van vol naar leeg over precies de ingestelde bedenktijd
 
 **Dev-client** (`./gradlew run`): een echte RuneLite met de plugin geladen, voor
 het visuele oordeel over rand, puls, tekst en banner. Inloggen gebeurt met een
