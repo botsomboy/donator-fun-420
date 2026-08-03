@@ -1,9 +1,11 @@
 package com.donator.fun420;
 
 import com.google.inject.Provides;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.Random;
 import javax.inject.Inject;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +13,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -22,8 +25,8 @@ import net.runelite.client.ui.overlay.OverlayManager;
 @Slf4j
 @PluginDescriptor(
 	name = "Donator - Fun 420",
-	description = "Visual 4:20 alarm and an April 20 banner",
-	tags = {"420", "fun", "alarm", "banner", "overlay"}
+	description = "Visual 4:20 alarm, an April 20 banner and a timed 420 quiz",
+	tags = {"420", "fun", "alarm", "banner", "quiz", "overlay"}
 )
 public class Fun420Plugin extends Plugin
 {
@@ -46,6 +49,9 @@ public class Fun420Plugin extends Plugin
 	private MouseManager mouseManager;
 
 	@Inject
+	private ClientThread clientThread;
+
+	@Inject
 	private AlarmOverlay alarmOverlay;
 
 	@Inject
@@ -53,6 +59,9 @@ public class Fun420Plugin extends Plugin
 
 	@Inject
 	private IntroOverlay introOverlay;
+
+	@Inject
+	private QuizOverlay quizOverlay;
 
 	@Inject
 	private BannerMouseListener bannerMouseListener;
@@ -66,7 +75,19 @@ public class Fun420Plugin extends Plugin
 	@Getter
 	private final IntroState introState = new IntroState();
 
+	@Getter
+	private final QuizState quizState = new QuizState();
+
 	private final ArrivalDetector arrivalDetector = new ArrivalDetector();
+
+	private final QuizSchedule quizSchedule = new QuizSchedule();
+
+	/**
+	 * Plainly seeded: which question comes up is meant to be unpredictable,
+	 * and nothing here has to be reproducible between clients. Tests that need
+	 * a fixed order build their own deck.
+	 */
+	private final QuizDeck quizDeck = new QuizDeck(QuizQuestions.ALL, new Random());
 
 	/**
 	 * The date on which the player clicked the banner away, or null if never.
@@ -120,6 +141,7 @@ public class Fun420Plugin extends Plugin
 		overlayManager.add(alarmOverlay);
 		overlayManager.add(bannerOverlay);
 		overlayManager.add(introOverlay);
+		overlayManager.add(quizOverlay);
 		mouseManager.registerMouseListener(bannerMouseListener);
 		log.debug("Donator - Fun 420 started");
 	}
@@ -131,8 +153,11 @@ public class Fun420Plugin extends Plugin
 		overlayManager.remove(alarmOverlay);
 		overlayManager.remove(bannerOverlay);
 		overlayManager.remove(introOverlay);
+		overlayManager.remove(quizOverlay);
 		alarmState.reset();
 		introState.reset();
+		quizState.reset();
+		quizSchedule.reset();
 		arrivalDetector.reset();
 		clock.useRealDate();
 		log.debug("Donator - Fun 420 stopped");
@@ -141,7 +166,72 @@ public class Fun420Plugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
-		alarmState.update(clock.now(), isInGame());
+		boolean inGame = isInGame();
+		alarmState.update(clock.now(), inGame);
+		updateQuiz(inGame);
+	}
+
+	/**
+	 * Puts a question on screen when one is due. Everything it asks is asked
+	 * of somebody else: whether a box is up is {@link QuizState}'s answer and
+	 * whether the wait is over is {@link QuizSchedule}'s.
+	 * <p>
+	 * Runs on the real calendar rather than on {@link Fun420Clock#now()}: the
+	 * April 20 preview moves that clock by months, and a run measured from a
+	 * moment on the simulated calendar would end the instant the preview was
+	 * switched on or off.
+	 */
+	private void updateQuiz(boolean inGame)
+	{
+		if (!inGame || !config.quizEnabled())
+		{
+			// The wait only runs while there is something to wait for, so
+			// switching the quiz off stops the timer. Switching it back on
+			// then costs a whole interval instead of putting a question on
+			// screen on the spot for the time it was off.
+			quizSchedule.reset();
+			return;
+		}
+
+		LocalDateTime now = clock.realNow();
+
+		if (quizState.isActive(now))
+		{
+			// The wait for the next question begins when this one is gone, so
+			// the timer is held at the current moment for as long as a box is
+			// on screen. That also settles what "two runs at once" would mean:
+			// there is no path to a second one while the first is up.
+			quizSchedule.restart(now);
+			return;
+		}
+
+		// Starts the wait on the first tick in the game and leaves a running
+		// one alone, so that the first question of a session is a full
+		// interval away rather than immediate.
+		quizSchedule.startIfNotRunning(now);
+
+		if (quizSchedule.isDue(now, Duration.ofMinutes(config.quizIntervalMinutes())))
+		{
+			startQuiz(now);
+		}
+	}
+
+	/**
+	 * Deals a question and puts it on screen, whatever the timer says.
+	 * <p>
+	 * Client thread only, because {@link QuizDeck#draw()} is.
+	 */
+	private void startQuiz(LocalDateTime now)
+	{
+		quizState.start(
+			now,
+			quizDeck.draw(),
+			Duration.ofSeconds(config.quizThinkingSeconds()),
+			Duration.ofSeconds(config.quizAnswerSeconds()));
+		// The wait restarts here as well as on every tick the box is up, so
+		// that a run which somehow saw no tick at all still costs an interval.
+		quizSchedule.restart(now);
+		log.debug("420 quiz question shown at {}", now);
 	}
 
 	/**
@@ -158,6 +248,11 @@ public class Fun420Plugin extends Plugin
 		{
 			alarmState.reset();
 			introState.reset();
+			quizState.reset();
+			// Stops the wait as well as the box: a timer that kept running
+			// while logged out would greet the next login with a question, and
+			// after a night away with one every interval it had "missed".
+			quizSchedule.reset();
 		}
 
 		if (arrivalDetector.onState(state))
@@ -204,6 +299,24 @@ public class Fun420Plugin extends Plugin
 				configManager.setConfiguration(
 					Fun420Config.GROUP,
 					Fun420Config.KEY_TEST_ALARM,
+					false);
+			}
+			return;
+		}
+
+		if (Fun420Config.KEY_TEST_QUIZ.equals(event.getKey()))
+		{
+			// Same edge trigger as the alarm above: judged on the value this
+			// event carries, so that switching the item back off cannot loop.
+			if (CONFIG_TRUE.equals(event.getNewValue()))
+			{
+				// Handed to the client thread because the deck deals there
+				// only, while a switch in the settings panel is flipped on the
+				// thread that draws that panel.
+				clientThread.invoke(() -> startQuiz(clock.realNow()));
+				configManager.setConfiguration(
+					Fun420Config.GROUP,
+					Fun420Config.KEY_TEST_QUIZ,
 					false);
 			}
 			return;

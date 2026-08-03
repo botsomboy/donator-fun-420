@@ -154,6 +154,31 @@ public class Fun420ClockTest
 	}
 
 	@Test
+	public void realNowIgnoresTheSimulation()
+	{
+		Clock base = Clock.fixed(Instant.parse("2026-08-03T14:05:00Z"), ZoneOffset.UTC);
+		Fun420Clock clock = new Fun420Clock(base);
+
+		clock.simulateApril20();
+
+		assertEquals("precondition: the simulation must actually be on",
+			LocalDateTime.of(2026, 4, 20, 14, 5, 0), clock.now());
+		assertEquals(LocalDateTime.of(2026, 8, 3, 14, 5, 0), clock.realNow());
+	}
+
+	@Test
+	public void realNowFollowsTheBaseClockWhileSimulating()
+	{
+		MutableClock base = new MutableClock(Instant.parse("2026-08-03T14:05:00Z"), ZoneOffset.UTC);
+		Fun420Clock clock = new Fun420Clock(base);
+
+		clock.simulateApril20();
+		base.advance(Duration.ofMinutes(30));
+
+		assertEquals(LocalDateTime.of(2026, 8, 3, 14, 35, 0), clock.realNow());
+	}
+
+	@Test
 	public void defaultConstructorTracksTheSystemClock()
 	{
 		LocalDateTime before = LocalDateTime.now();

@@ -6,6 +6,8 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
+import net.runelite.client.config.Units;
 
 @ConfigGroup(Fun420Config.GROUP)
 public interface Fun420Config extends Config
@@ -16,6 +18,7 @@ public interface Fun420Config extends Config
 	// (ConfigManager reads/writes and ConfigChanged filtering).
 	String KEY_TEST_ALARM = "testAlarm";
 	String KEY_SIMULATE_APRIL_20 = "simulateApril20";
+	String KEY_TEST_QUIZ = "testQuiz";
 
 	// Hidden persisted state, written by the plugin through ConfigManager.
 	// Deliberately has no @ConfigItem: it is not a user-facing setting.
@@ -36,9 +39,16 @@ public interface Fun420Config extends Config
 	String bannerSection = "bannerSection";
 
 	@ConfigSection(
+		name = "Quiz",
+		description = "The timed 420 quiz",
+		position = 2
+	)
+	String quizSection = "quizSection";
+
+	@ConfigSection(
 		name = "Test",
-		description = "Preview both features on any day",
-		position = 2,
+		description = "Preview every feature on any day",
+		position = 3,
 		closedByDefault = true
 	)
 	String testSection = "testSection";
@@ -130,6 +140,75 @@ public interface Fun420Config extends Config
 	}
 
 	@ConfigItem(
+		keyName = "quizEnabled",
+		name = "Enable quiz",
+		description = "Slide a 420 question into the screen every so often",
+		section = quizSection,
+		position = 0
+	)
+	default boolean quizEnabled()
+	{
+		return true;
+	}
+
+	// The bounds are what the settings panel will let through, and they are
+	// there to keep a value the logic cannot sensibly serve out of it: an
+	// interval of zero would put a question on screen on every tick.
+	@Range(min = 1, max = 240)
+	@Units(Units.MINUTES)
+	@ConfigItem(
+		keyName = "quizIntervalMinutes",
+		name = "Interval",
+		description = "How long after one question the next one appears; the wait only runs while you are in game",
+		section = quizSection,
+		position = 1
+	)
+	default int quizIntervalMinutes()
+	{
+		return 15;
+	}
+
+	@Range(min = 1, max = 60)
+	@Units(Units.SECONDS)
+	@ConfigItem(
+		keyName = "quizThinkingSeconds",
+		name = "Thinking time",
+		description = "How long the countdown bar takes to drain before the answer appears",
+		section = quizSection,
+		position = 2
+	)
+	default int quizThinkingSeconds()
+	{
+		return 10;
+	}
+
+	@Range(min = 1, max = 60)
+	@Units(Units.SECONDS)
+	@ConfigItem(
+		keyName = "quizAnswerSeconds",
+		name = "Answer time",
+		description = "How long the answer stays up before the box fades away",
+		section = quizSection,
+		position = 3
+	)
+	default int quizAnswerSeconds()
+	{
+		return 10;
+	}
+
+	@ConfigItem(
+		keyName = "quizCorner",
+		name = "Corner",
+		description = "Which corner the box appears in, and therefore which side it slides in from",
+		section = quizSection,
+		position = 4
+	)
+	default QuizCorner quizCorner()
+	{
+		return QuizCorner.TOP_LEFT;
+	}
+
+	@ConfigItem(
 		keyName = KEY_TEST_ALARM,
 		name = "Trigger alarm now",
 		description = "Starts the alarm immediately and switches itself back off",
@@ -149,6 +228,18 @@ public interface Fun420Config extends Config
 		position = 1
 	)
 	default boolean simulateApril20()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = KEY_TEST_QUIZ,
+		name = "Show a question now",
+		description = "Shows a quiz question immediately and switches itself back off",
+		section = testSection,
+		position = 2
+	)
+	default boolean testQuiz()
 	{
 		return false;
 	}

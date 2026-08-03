@@ -38,6 +38,18 @@ public class Fun420Clock
 			: time;
 	}
 
+	/**
+	 * The moment on the real calendar, deliberately blind to the April 20
+	 * preview. Anything that anchors on a moment and measures from it later
+	 * must read this: {@link #now()} jumps months when the preview is switched
+	 * on or off, which would strand a running animation in the past or the
+	 * future the instant the toggle moves.
+	 */
+	public LocalDateTime realNow()
+	{
+		return LocalDateTime.now(baseClock);
+	}
+
 	public void useRealDate()
 	{
 		this.simulating = false;
